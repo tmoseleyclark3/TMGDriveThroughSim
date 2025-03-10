@@ -59,33 +59,33 @@ class DriveThrough:
         # Stage 3: Service Queue (with blocking)
         enter_service_queue_time = self.env.now
         try:
-            yield self.service_queue.put(car_id)
-            # Overwrite the placeholder:
-            self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
+        yield self.service_queue.put(car_id)
+        # Overwrite the placeholder:
+        self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
 
-            # Stage 4: Payment and Handoff
+        # Stage 4: Payment and Handoff
+        # Move this line to the correct indentation level:
         with self.service_window.request() as request:
             yield request
-            service_start_time = self.env.now # Capture the service start time
             yield self.env.timeout(self.config.PAYMENT_TIME)
             service_end_time = self.env.now
-            self.metrics['wait_times_service'][-1] = service_end_time - service_start_time #correct calculation
+            #Overwrite placeholder
+            self.metrics['wait_times_service'][-1] = service_end_time - enter_service_queue_time
             yield self.service_queue.get()
 
-            # Stage 5: Wait for order prep
-            yield self.order_ready_events[car_id]
-            del self.order_ready_events[car_id]
+        # Stage 5: Wait for order prep
+        yield self.order_ready_events[car_id]
+        del self.order_ready_events[car_id]
 
-            # Completion
-            total_time = self.env.now - arrival_time
-            # Overwrite the placeholder:
-            self.metrics['total_times'][-1] = total_time
-            self.metrics['cars_served'] += 1
+        # Completion
+        total_time = self.env.now - arrival_time
+        # Overwrite the placeholder:
+        self.metrics['total_times'][-1] = total_time
+        self.metrics['cars_served'] += 1
 
-        except simpy.Interrupt:
-            self.metrics['cars_blocked'] += 1
-            # No need to add np.nan again; it's already there as a placeholder
-            return
+    except simpy.Interrupt:
+        self.metrics['cars_blocked'] += 1
+        return
 
     def prep_order(self, car_id):
         with self.order_prep.request() as req:
