@@ -99,10 +99,13 @@ def car_arrivals(env, drive_through):
         env.process(drive_through.process_car(car_id))
 
 def run_simulation(config):
+    print("Starting simulation...") #added print
     env = simpy.Environment()
     drive_through = DriveThrough(env, config)
     env.process(car_arrivals(env, drive_through))
+    print("Car arrivals process started...") #added print
     env.run(until=config.SIMULATION_TIME)
+    print("Simulation completed.") #added print
     return drive_through.metrics
 
 def analyze_results(metrics, config):
