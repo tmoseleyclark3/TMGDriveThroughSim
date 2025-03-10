@@ -64,13 +64,13 @@ class DriveThrough:
             self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
 
             # Stage 4: Payment and Handoff
-            with self.service_window.request() as request:
-                yield request
-                yield self.env.timeout(self.config.PAYMENT_TIME)
-                service_end_time = self.env.now
-                #Overwrite placeholder
-                self.metrics['wait_times_service'][-1] = service_end_time - enter_service_queue_time
-                yield self.service_queue.get()
+        with self.service_window.request() as request:
+            yield request
+            service_start_time = self.env.now # Capture the service start time
+            yield self.env.timeout(self.config.PAYMENT_TIME)
+            service_end_time = self.env.now
+            self.metrics['wait_times_service'][-1] = service_end_time - service_start_time #correct calculation
+            yield self.service_queue.get()
 
             # Stage 5: Wait for order prep
             yield self.order_ready_events[car_id]
