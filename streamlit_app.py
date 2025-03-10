@@ -167,4 +167,19 @@ Adjust the parameters in the sidebar and click 'Run Simulation' to see the resul
 # --- Sidebar (Inputs) ---
 with st.sidebar:
     st.header("Simulation Parameters")
-    arrival_rate = st.number_input("Arrival Rate (cars/min)", min_value=0.1, max_value=10.0, value=1.0, step=0.1, format="%.1f
+    arrival_rate = st.number_input("Arrival Rate (cars/min)", min_value=0.1, max_value=10.0, value=1.0, step=0.1, format="%.1f")
+    order_time = st.number_input("Order Time (min)", min_value=0.1, max_value=10.0, value=1.0, step=0.1, format="%.1f")
+    prep_time = st.number_input("Preparation Time (min)", min_value=0.1, max_value=20.0, value=400.0 / 60.0, step=0.1, format="%.2f")
+    payment_time = st.number_input("Payment Time (min)", min_value=0.1, max_value=5.0, value=1.0, step=0.1, format="%.1f")
+    queue_capacity = st.number_input("Queue Capacity", min_value=1, max_value=100, value=8, step=1)
+    simulation_time = st.number_input("Simulation Time (min)", min_value=1, max_value=1440, value=600, step=1)
+    num_order_stations = st.number_input("Number of Order Stations", min_value=1, max_value=10, value=2, step=1) # added num_order_stations
+
+    run_button = st.button("Run Simulation")
+
+# --- DriveThrough Class ---
+def prep_order(self, car_id):
+    with self.order_prep.request() as req:
+        yield req
+        yield self.env.timeout(self.config.PREP_TIME) # PREP_TIME is in minutes
+        self.order_ready_events[car_id].succeed()
