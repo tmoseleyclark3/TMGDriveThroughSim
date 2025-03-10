@@ -35,7 +35,8 @@ class DriveThrough:
             'car_ids': []
         }
 
-    def process_car(self, car_id):
+   def process_car(self, car_id):
+        print(f"Car {car_id} arrived at {self.env.now}") #added print
         arrival_time = self.env.now
         self.metrics['car_ids'].append(car_id)
 
@@ -52,6 +53,7 @@ class DriveThrough:
             yield self.env.timeout(self.config.ORDER_TIME)
             order_end_time = self.env.now
             self.metrics['wait_times_ordering'][-1] = order_end_time - order_start_time
+            print(f"Car {car_id} finished ordering at {self.env.now}") #added print
 
         # Stage 2: Start order prep (non-blocking)
         self.env.process(self.prep_order(car_id))
@@ -61,6 +63,7 @@ class DriveThrough:
         try:
             yield self.service_queue.put(car_id)
             self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
+            print(f"Car {car_id} entered service queue at {self.env.now}") #added print
 
             # Stage 4: Payment and Handoff
             with self.service_window.request() as request:
@@ -70,18 +73,22 @@ class DriveThrough:
                 service_end_time = self.env.now
                 self.metrics['wait_times_service'][-1] = service_end_time - service_start_time #Corrected calculation
                 yield self.service_queue.get()
+                print(f"Car {car_id} finished service at {self.env.now}") #added print
 
             # Stage 5: Wait for order prep
             yield self.order_ready_events[car_id]
             del self.order_ready_events[car_id]
+            print(f"Car {car_id} order ready at {self.env.now}") #added print
 
             # Completion
             total_time = self.env.now - arrival_time
             self.metrics['total_times'][-1] = total_time
             self.metrics['cars_served'] += 1
+            print(f"Car {car_id} completed at {self.env.now}") #added print
 
         except simpy.Interrupt:
             self.metrics['cars_blocked'] += 1
+            print(f"Car {car_id} blocked at {self.env.now}") #added print
             return
 
     def prep_order(self, car_id):
