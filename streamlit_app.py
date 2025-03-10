@@ -182,8 +182,9 @@ with st.sidebar:
 
 # --- Main Panel (Outputs) ---
 if run_button:
+    # Create the Config object *using the current sidebar values*.
     config = Config(arrival_rate, order_time, prep_time, payment_time, queue_capacity, simulation_time, num_order_stations)
-    metrics = run_simulation(config)
+    metrics = run_simulation(config)  # Now, 'config' reflects the current inputs.
     results, fig_wait, fig_total, df = analyze_results(metrics, config)
 
     st.subheader("Simulation Results")
