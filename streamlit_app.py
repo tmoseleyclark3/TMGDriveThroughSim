@@ -23,7 +23,7 @@ class DriveThrough:
         self.order_stations = [simpy.Resource(env, capacity=1) for _ in range(config.NUM_ORDER_STATIONS)]
         self.service_window = simpy.Resource(env, capacity=1)
         self.service_queue = simpy.Store(env, capacity=config.QUEUE_CAPACITY)
-        self.order_prep = simpy.Resource(env, capacity=1)
+        self.order_prep = simpy.Resource(env, capacity=1)  # Could be multiple prep stations
         self.order_ready_events = {}
         self.metrics = {
             'wait_times_ordering': [],
@@ -32,7 +32,22 @@ class DriveThrough:
             'total_times': [],
             'cars_served': 0,
             'cars_blocked': 0,
-            'car_ids': []
+            'car_ids': [],
+            'order_sizes': [],  # NEW: Track order sizes
+            'balking_events': [], # NEW: Track balking
+        }
+        # NEW: Define a menu (item: [prep_time, probability])
+        self.menu = {
+            "Burger": [2.5, 0.3],  # 2.5 minutes prep time, 30% probability
+            "Fries": [1.5, 0.4],
+            "Salad": [2.0, 0.15],
+            "Drink": [0.5, 0.8],
+            "Ice Cream": [1.0, 0.35],
+        }
+        self.payment_types = {
+            "Card": [0.7, 0.85], # [mean_time, prob_of_occurence]
+            "Cash": [1.1, 0.13],
+            "MobilePay": [0.5, 0.02]
         }
 
     def process_car(self, car_id):
@@ -45,57 +60,105 @@ class DriveThrough:
         self.metrics['wait_times_before_service'].append(np.nan)
         self.metrics['wait_times_service'].append(np.nan)
         self.metrics['total_times'].append(np.nan)
+        self.metrics['order_sizes'].append(np.nan)  # Initialize order size
+        self.metrics['balking_events'].append(0) # Initialize to not balked
 
-        # Stage 1: Ordering
+        # --- Stage 0: Balking (NEW) ---
+        # Determine if the customer balks based on queue length.
+        if len(self.service_queue.items) >= self.config.QUEUE_CAPACITY * 0.8:  # Example: Balk if queue is 80% full
+            balk_prob = 0.2 + (len(self.service_queue.items) / self.config.QUEUE_CAPACITY) * 0.5 # Example: increasing prob
+            if random.random() < balk_prob:
+                print(f"Car {car_id} balked at {self.env.now}")
+                self.metrics['cars_blocked'] += 1
+                self.metrics['balking_events'][-1] = 1 # Set balking event to 1
+                return  # Exit the process if the car balks
+
+
+        # --- Stage 1: Ordering ---
         order_station = random.choice(self.order_stations)
         with order_station.request() as request:
             yield request
             order_start_time = self.env.now
-            yield self.env.timeout(self.config.ORDER_TIME)
+
+            # --- IMPROVEMENTS ---
+            # 1.1. Order Size & Menu:  Determine order size and items.
+            order_size = random.randint(1, 4)  # Example: 1 to 4 items per order
+            self.metrics['order_sizes'][-1] = order_size  # Store the order size
+            order = []
+            for _ in range(order_size):
+                # Choose an item based on menu probabilities.
+                item = random.choices(list(self.menu.keys()), weights=[item[1] for item in self.menu.values()])[0]
+                order.append(item)
+
+            # 1.2. Variable Order Time: Order time depends on order size and complexity.
+            order_time = self.config.ORDER_TIME * (0.8 + 0.4 * order_size)  # Base time + per-item time
+            order_time *= random.uniform(0.9, 1.1)  # Add some random variation (+/- 10%)
+
+            yield self.env.timeout(order_time)
             order_end_time = self.env.now
             self.metrics['wait_times_ordering'][-1] = order_end_time - order_start_time
-            print(f"Car {car_id} finished ordering at {self.env.now}")
+            print(f"Car {car_id} finished ordering at {self.env.now}, Order: {order}")
 
-        # Stage 2: Start order prep
-        self.env.process(self.prep_order(car_id))
+        # --- Stage 2: Start order prep (non-blocking) ---
+        # Pass the 'order' to the prep_order function.
+        self.env.process(self.prep_order(car_id, order))
 
-        # Stage 3: Service Queue
+        # --- Stage 3: Service Queue ---
         enter_service_queue_time = self.env.now
         try:
             yield self.service_queue.put(car_id)
             self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
             print(f"Car {car_id} entered service queue at {self.env.now}")
 
-            # Stage 4: Payment and Handoff
+            # --- Stage 4: Payment and Handoff ---
             with self.service_window.request() as request:
                 yield request
                 service_start_time = self.env.now
-                yield self.env.timeout(self.config.PAYMENT_TIME)
+
+                # --- IMPROVEMENTS ---
+                # 4.1. Variable Payment Time:  Based on payment type.
+                payment_type = random.choices(list(self.payment_types.keys()), weights=[pt[1] for pt in self.payment_types.values()])[0]
+                payment_time = np.random.normal(loc=self.payment_types[payment_type][0], scale = self.payment_types[payment_type][0]/4 ) # Example distribution
+                if payment_time < 0:
+                  payment_time = self.payment_types[payment_type][0]/4
+                # 4.2 Payment failure
+                if payment_type == "Card":
+                    if random.random() < 0.05:  # 5% chance of card failure
+                        payment_time += 1.5  # extra time
+
+                yield self.env.timeout(payment_time)
+
+
                 service_end_time = self.env.now
                 self.metrics['wait_times_service'][-1] = service_end_time - service_start_time
                 yield self.service_queue.get()
                 print(f"Car {car_id} finished service at {self.env.now}")
 
-            # Stage 5: Wait for order prep
+            # --- Stage 5: Wait for order prep ---
             yield self.order_ready_events[car_id]
             del self.order_ready_events[car_id]
             print(f"Car {car_id} order ready at {self.env.now}")
 
-            # Completion
+            # --- Completion ---
             total_time = self.env.now - arrival_time
             self.metrics['total_times'][-1] = total_time
             self.metrics['cars_served'] += 1
             print(f"Car {car_id} completed at {self.env.now}")
 
-        except simpy.Interrupt:
+        except simpy.Interrupt:  # Should not happen with Store, but good practice.
             self.metrics['cars_blocked'] += 1
-            print(f"Car {car_id} blocked at {self.env.now}")
+            print(f"Car {car_id} blocked at {self.env.now}") #should not happen
             return
 
-    def prep_order(self, car_id):
+    # Modified prep_order to accept the order list.
+    def prep_order(self, car_id, order):
         with self.order_prep.request() as req:
             yield req
-            yield self.env.timeout(self.config.PREP_TIME)
+            total_prep_time = 0
+            for item in order:
+                total_prep_time += self.menu[item][0]  # Add prep time for each item
+            total_prep_time *= random.uniform(0.8, 1.2) # Add random variation
+            yield self.env.timeout(total_prep_time)
             self.order_ready_events[car_id].succeed()
 
 def car_arrivals(env, drive_through):
