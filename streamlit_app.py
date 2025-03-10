@@ -291,3 +291,4 @@ if 'metrics' in locals(): #check if the button has been pressed
     st.plotly_chart(fig_wait_order, use_container_width=True)
     st.plotly_chart(fig_wait_payment, use_container_width=True)
     st.plotly_chart(fig_total, use_container_width=True)
+
