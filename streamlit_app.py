@@ -274,7 +274,7 @@ if 'metrics' in locals(): #check if the button has been pressed
     st.dataframe(df)  # Show raw data
 
     # Display metrics in columns for better layout
-    col1,col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Cars Served", results['Cars Served'])
         st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
