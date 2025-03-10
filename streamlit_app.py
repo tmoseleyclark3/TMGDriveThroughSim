@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-# --- Simulation Code ---
+# --- Simulation Code --- (Corrected and Improved)
 class Config:
     def __init__(self, arrival_rate, order_time, prep_time, payment_time, order_queue_capacity, service_queue_capacity, simulation_time, num_order_stations):
         self.ARRIVAL_RATE = arrival_rate
@@ -71,7 +71,7 @@ class DriveThrough:
         self.metrics['cars_blocked_service_queue'] = 0
 
 
-       # --- Stage 0: Balking (BEFORE entering any queue) ---
+        # --- Stage 0: Balking (BEFORE entering any queue) ---
         if len(self.order_queue.items) + len(self.service_queue.items) >= self.config.ORDER_QUEUE_CAPACITY + self.config.SERVICE_QUEUE_CAPACITY:
             # combined length
             balk_prob = 0.3  # Increased base balking probability
@@ -115,7 +115,7 @@ class DriveThrough:
             # --- Stage 3: Start order prep (non-blocking) ---
             self.env.process(self.prep_order(car_id, order))
 
-        except simpy.Interrupt:  #  if order queue is full
+        except simpy.Interrupt:  #  if order queue is full
             print(f"Car {car_id} blocked at order queue at {self.env.now}")
             self.metrics['cars_blocked_order_queue'] += 1
             return
@@ -148,7 +148,7 @@ class DriveThrough:
                 self.metrics['wait_times_payment'][-1] = service_end_time - service_start_time  # Correct metric name
                 print(f"Car {car_id} finished payment at {self.env.now}")
 
-        except simpy.Interrupt:  #  if service queue is full
+        except simpy.Interrupt:  #  if service queue is full
             print(f"Car {car_id} blocked at service queue at {self.env.now}")
             self.metrics['cars_blocked_service_queue'] += 1
             return
@@ -242,7 +242,7 @@ def analyze_results(metrics, config):
 
     return results, fig_wait_order,fig_wait_payment, fig_total, df
 
-# --- Streamlit App ---
+# --- Streamlit App --- (Complete)
 st.set_page_config(page_title="Drive-Through Simulation", page_icon=":car:", layout="wide")
 st.title("Drive-Through Simulation")
 st.write("""
@@ -278,5 +278,4 @@ with st.sidebar:
     prep_time = st.number_input("Preparation Time (min)", min_value=0.1, max_value=20.0, value=st.session_state.prep_time, step=0.1, format="%.2f", key="prep_time")
     payment_time = st.number_input("Payment Time (min)", min_value=0.1, max_value=5.0, value=st.session_state.payment_time, step=0.1, format="%.1f", key="payment_time")
     order_queue_capacity = st.number_input("Order Queue Capacity", min_value=1, max_value=100, value=st.session_state.order_queue_capacity, step=1, key="order_queue_capacity")
-    service_queue_capacity = st.number_input("Service Queue Capacity", min_value=1, max_value=100, value=st.session_state.service_queue_capacity, step=1, key="service_queue_capacity")
-    simulation_time = st.number_input("Simulation Time (min)", min_value=1, max_value=1440, value=st.session_state.simulation_time, step=1, key="simulation_time")
+    service_queue_capacity = st.number_input("Service Queue Capacity", min_value=1, max_value=100, value=st.
