@@ -34,7 +34,7 @@ class DriveThrough:
             'car_ids': []  # Store car IDs
         }
 
-  def process_car(self, car_id):
+    def process_car(self, car_id):
         arrival_time = self.env.now
         self.metrics['car_ids'].append(car_id)  # Track car ID
 
@@ -86,7 +86,7 @@ class DriveThrough:
             yield req
             yield self.env.timeout(self.config.PREP_TIME)
             self.order_ready_events[car_id].succeed()
-
+            
 def car_arrivals(env, drive_through):
     car_id = 0
     while True:
