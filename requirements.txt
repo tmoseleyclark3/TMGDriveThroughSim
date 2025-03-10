@@ -1,1 +1,5 @@
+simpy
+pandas
+matplotlib
 streamlit
+plotly
