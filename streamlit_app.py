@@ -287,24 +287,27 @@ with st.sidebar:
         metrics = run_simulation(config)
         results, fig_wait_order, fig_wait_payment, fig_total, df = analyze_results(metrics, config)
 
-        st.header("Simulation Results")
-        st.dataframe(df)  # Show raw data
+# --- Main Area (Results) ---  <-- Moved OUTSIDE the sidebar
+st.header("Simulation Results")  # Moved outside the 'with st.sidebar' block
 
-        # Display metrics in columns for better layout
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Cars Served", results['Cars Served'])
-            st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
-            st.metric("Cars Blocked (Service Queue)", results['Cars Blocked (Service Queue)'])
-        with col2:
-            st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
-            st.metric("Avg Wait Ordering (min)", results['Avg Wait Ordering (min)'])
-            st.metric("Avg Wait Payment (min)", results['Avg Wait Payment (min)'])
-        with col3:
-            st.metric("Avg Wait Before Order Queue (min)", results['Avg Wait Before Order Queue (min)'])
-            st.metric("Avg Wait Before Service (min)", results['Avg Wait Before Service (min)'])
-            st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
+if 'metrics' in locals(): #check if the button has been pressed
+    st.dataframe(df)  # Show raw data
 
-        st.plotly_chart(fig_wait_order, use_container_width=True)
-        st.plotly_chart(fig_wait_payment, use_container_width=True)
-        st.plotly_chart(fig_total, use_container_width=True)
+    # Display metrics in columns for better layout
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Cars Served", results['Cars Served'])
+        st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
+        st.metric("Cars Blocked (Service Queue)", results['Cars Blocked (Service Queue)'])
+    with col2:
+        st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
+        st.metric("Avg Wait Ordering (min)", results['Avg Wait Ordering (min)'])
+        st.metric("Avg Wait Payment (min)", results['Avg Wait Payment (min)'])
+    with col3:
+        st.metric("Avg Wait Before Order Queue (min)", results['Avg Wait Before Order Queue (min)'])
+        st.metric("Avg Wait Before Service (min)", results['Avg Wait Before Service (min)'])
+        st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
+
+    st.plotly_chart(fig_wait_order, use_container_width=True)
+    st.plotly_chart(fig_wait_payment, use_container_width=True)
+    st.plotly_chart(fig_total, use_container_width=True)
