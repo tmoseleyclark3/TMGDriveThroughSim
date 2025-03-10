@@ -164,8 +164,7 @@ class DriveThrough:
         self.metrics['cars_served'] += 1
         print(f"Car {car_id} completed at {self.env.now}")
 
-
-
+    
     def prep_order(self, car_id, order):
         with self.order_prep.request() as req:
             yield req
