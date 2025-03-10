@@ -242,7 +242,7 @@ def analyze_results(metrics, config):
 
     return results, fig_wait_order,fig_wait_payment, fig_total, df
 
-# --- Streamlit App --- (Complete)
+# --- Streamlit App --- (Complete and Corrected)
 st.set_page_config(page_title="Drive-Through Simulation", page_icon=":car:", layout="wide")
 st.title("Drive-Through Simulation")
 st.write("""
@@ -278,4 +278,33 @@ with st.sidebar:
     prep_time = st.number_input("Preparation Time (min)", min_value=0.1, max_value=20.0, value=st.session_state.prep_time, step=0.1, format="%.2f", key="prep_time")
     payment_time = st.number_input("Payment Time (min)", min_value=0.1, max_value=5.0, value=st.session_state.payment_time, step=0.1, format="%.1f", key="payment_time")
     order_queue_capacity = st.number_input("Order Queue Capacity", min_value=1, max_value=100, value=st.session_state.order_queue_capacity, step=1, key="order_queue_capacity")
-    service_queue_capacity = st.number_input("Service Queue Capacity", min_value=1, max_value=100, value=st.
+    service_queue_capacity = st.number_input("Service Queue Capacity", min_value=1, max_value=100, value=st.session_state.service_queue_capacity, step=1, key="service_queue_capacity")
+    simulation_time = st.number_input("Simulation Time (min)", min_value=1, max_value=1440, value=st.session_state.simulation_time, step=1, key="simulation_time")
+    num_order_stations = st.number_input("Number of Order Stations", min_value=1, max_value=10, value=st.session_state.num_order_stations, step=1, key="num_order_stations")
+
+    if st.button("Run Simulation"):
+        config = Config(arrival_rate, order_time, prep_time, payment_time, order_queue_capacity, service_queue_capacity, simulation_time, num_order_stations)
+        metrics = run_simulation(config)
+        results, fig_wait_order, fig_wait_payment, fig_total, df = analyze_results(metrics, config)
+
+        st.header("Simulation Results")
+        st.dataframe(df)  # Show raw data
+
+        # Display metrics in columns for better layout
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Cars Served", results['Cars Served'])
+            st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
+            st.metric("Cars Blocked (Service Queue)", results['Cars Blocked (Service Queue)'])
+        with col2:
+            st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
+            st.metric("Avg Wait Ordering (min)", results['Avg Wait Ordering (min)'])
+            st.metric("Avg Wait Payment (min)", results['Avg Wait Payment (min)'])
+        with col3:
+            st.metric("Avg Wait Before Order Queue (min)", results['Avg Wait Before Order Queue (min)'])
+            st.metric("Avg Wait Before Service (min)", results['Avg Wait Before Service (min)'])
+            st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
+
+        st.plotly_chart(fig_wait_order, use_container_width=True)
+        st.plotly_chart(fig_wait_payment, use_container_width=True)
+        st.plotly_chart(fig_total, use_container_width=True)
