@@ -34,7 +34,7 @@ class DriveThrough:
             'car_ids': []  # Store car IDs
         }
 
-def process_car(self, car_id):
+    def process_car(self, car_id):
         arrival_time = self.env.now
         self.metrics['car_ids'].append(car_id)  # Track car ID
 
@@ -85,15 +85,6 @@ def process_car(self, car_id):
         except simpy.Interrupt:
             self.metrics['cars_blocked'] += 1
             # No need to add np.nan again; it's already there as a placeholder
-            return
-
-        except simpy.Interrupt:
-            self.metrics['cars_blocked'] += 1
-            # Add these lines to handle blocked cars' metrics:
-            self.metrics['wait_times_ordering'].append(np.nan)
-            self.metrics['wait_times_before_service'].append(np.nan)
-            self.metrics['wait_times_service'].append(np.nan)
-            self.metrics['total_times'].append(np.nan)
             return
 
     def prep_order(self, car_id):
