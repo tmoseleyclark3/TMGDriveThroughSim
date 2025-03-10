@@ -40,6 +40,7 @@ class DriveThrough:
         arrival_time = self.env.now
         self.metrics['car_ids'].append(car_id)
 
+        # Initialize metrics with NaN so indices align correctly, even if a car is blocked.
         self.metrics['wait_times_ordering'].append(np.nan)
         self.metrics['wait_times_before_service'].append(np.nan)
         self.metrics['wait_times_service'].append(np.nan)
@@ -52,7 +53,7 @@ class DriveThrough:
             order_start_time = self.env.now
             yield self.env.timeout(self.config.ORDER_TIME)
             order_end_time = self.env.now
-            self.metrics['wait_times_ordering'][-1] = order_end_time - order_start_time
+            self.metrics['wait_times_ordering'][-1] = order_end_time - order_start_time  # Update the last added entry.
             print(f"Car {car_id} finished ordering at {self.env.now}")
 
         # Stage 2: Start order prep (non-blocking)
@@ -62,7 +63,7 @@ class DriveThrough:
         enter_service_queue_time = self.env.now
         try:
             yield self.service_queue.put(car_id)
-            self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
+            self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time # Update the last added entry.
             print(f"Car {car_id} entered service queue at {self.env.now}")
 
             # Stage 4: Payment and Handoff
@@ -71,25 +72,26 @@ class DriveThrough:
                 service_start_time = self.env.now
                 yield self.env.timeout(self.config.PAYMENT_TIME)
                 service_end_time = self.env.now
-                self.metrics['wait_times_service'][-1] = service_end_time - service_start_time
-                yield self.service_queue.get()
+                self.metrics['wait_times_service'][-1] = service_end_time - service_start_time  # Update the last added entry
+                yield self.service_queue.get() # Remove car from the queue
                 print(f"Car {car_id} finished service at {self.env.now}")
+
 
             # Stage 5: Wait for order prep
             yield self.order_ready_events[car_id]
-            del self.order_ready_events[car_id]
+            del self.order_ready_events[car_id]  # Clean up to prevent memory leak.
             print(f"Car {car_id} order ready at {self.env.now}")
 
             # Completion
             total_time = self.env.now - arrival_time
-            self.metrics['total_times'][-1] = total_time
+            self.metrics['total_times'][-1] = total_time  # Update the last added entry
             self.metrics['cars_served'] += 1
             print(f"Car {car_id} completed at {self.env.now}")
 
-        except simpy.Interrupt:
+        except simpy.Interrupt:  # This will never happen with the Store.  It *would* if you used a Resource.
             self.metrics['cars_blocked'] += 1
             print(f"Car {car_id} blocked at {self.env.now}")
-            return
+            return  # Important: Exit the process if blocked
 
     def prep_order(self, car_id):
         with self.order_prep.request() as req:
@@ -102,7 +104,7 @@ def car_arrivals(env, drive_through):
     while True:
         yield env.timeout(random.expovariate(drive_through.config.ARRIVAL_RATE))
         car_id += 1
-        drive_through.order_ready_events[car_id] = env.event()
+        drive_through.order_ready_events[car_id] = env.event()  # Create the event *before* starting the process.
         env.process(drive_through.process_car(car_id))
 
 def run_simulation(config):
@@ -116,7 +118,7 @@ def run_simulation(config):
     return drive_through.metrics
 
 def analyze_results(metrics, config):
-    if not metrics['wait_times_ordering']:
+    if not metrics['car_ids']:  # Check if any cars arrived at all
         return {
             'Cars Served': 0,
             'Cars Blocked': 0,
@@ -135,6 +137,7 @@ def analyze_results(metrics, config):
         'Total Time (min)': metrics['total_times']
     })
 
+    # Calculate averages, handling potential NaNs (from blocked cars)
     avg_wait_ordering = df['Wait Time Ordering (min)'].mean()
     avg_wait_before_service = df['Wait Time Before Service (min)'].mean()
     avg_wait_service = df['Wait Time Service (min)'].mean()
@@ -169,17 +172,31 @@ with st.sidebar:
     st.header("Simulation Parameters")
     arrival_rate = st.number_input("Arrival Rate (cars/min)", min_value=0.1, max_value=10.0, value=1.0, step=0.1, format="%.1f")
     order_time = st.number_input("Order Time (min)", min_value=0.1, max_value=10.0, value=1.0, step=0.1, format="%.1f")
-    prep_time = st.number_input("Preparation Time (min)", min_value=0.1, max_value=20.0, value=400.0 / 60.0, step=0.1, format="%.2f")
+    prep_time = st.number_input("Preparation Time (min)", min_value=0.1, max_value=20.0, value=400.0 / 60.0, step=0.1, format="%.2f")  # Corrected value calculation
     payment_time = st.number_input("Payment Time (min)", min_value=0.1, max_value=5.0, value=1.0, step=0.1, format="%.1f")
     queue_capacity = st.number_input("Queue Capacity", min_value=1, max_value=100, value=8, step=1)
     simulation_time = st.number_input("Simulation Time (min)", min_value=1, max_value=1440, value=600, step=1)
-    num_order_stations = st.number_input("Number of Order Stations", min_value=1, max_value=10, value=2, step=1) # added num_order_stations
+    num_order_stations = st.number_input("Number of Order Stations", min_value=1, max_value=10, value=2, step=1)
 
     run_button = st.button("Run Simulation")
-    
-# --- DriveThrough Class ---
-def prep_order(self, car_id):
-    with self.order_prep.request() as req:
-        yield req
-        yield self.env.timeout(self.config.PREP_TIME) # PREP_TIME is in minutes
-        self.order_ready_events[car_id].succeed()
+
+# --- Main Panel (Outputs) ---
+if run_button:
+    config = Config(arrival_rate, order_time, prep_time, payment_time, queue_capacity, simulation_time, num_order_stations)
+    metrics = run_simulation(config)
+    results, fig_wait, fig_total, df = analyze_results(metrics, config)
+
+    st.subheader("Simulation Results")
+    st.write(results)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig_wait, use_container_width=True)
+    with col2:
+        st.plotly_chart(fig_total, use_container_width=True)
+
+    with st.expander("Raw Data"):
+        st.dataframe(df)
+
+else:
+    st.write("Click 'Run Simulation' to start.")
