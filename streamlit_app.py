@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-# --- Simulation Code --- (Corrected and Improved, Balking Removed)
+# --- Simulation Code --- (Corrected and Improved)
 class Config:
     def __init__(self, arrival_rate, order_time, prep_time, payment_time, order_queue_capacity, service_queue_capacity, simulation_time, num_order_stations):
         self.ARRIVAL_RATE = arrival_rate
@@ -34,11 +34,11 @@ class DriveThrough:
             'wait_times_before_service': [],
             'total_times': [],
             'cars_served': 0,
-            'cars_blocked_order_queue': 0,  # Still track blocking, but no balking logic
+            'cars_blocked_order_queue': 0,
             'cars_blocked_service_queue': 0,
             'car_ids': [],
             'order_sizes': [],
-            # 'balking_events': [],  Removed balking events
+            'balking_events': [],
         }
         self.menu = {
             "Burger": [2.5, 0.3],
@@ -62,8 +62,16 @@ class DriveThrough:
         for metric in ['wait_times_ordering', 'wait_times_payment', 'wait_times_before_order_queue',
                        'wait_times_before_service', 'total_times', 'order_sizes']:
             self.metrics[metric].append(np.nan)
-        # self.metrics['balking_events'].append(0)  Removed balking initialization
+        self.metrics['balking_events'].append(0)
 
+
+        # --- Stage 0: Balking ---
+        if len(self.order_queue.items) + len(self.service_queue.items) >= self.config.ORDER_QUEUE_CAPACITY + self.config.SERVICE_QUEUE_CAPACITY:
+            if random.random() < 0.3:
+                print(f"Car {car_id} balked (initial) at {self.env.now}")
+                self.metrics['cars_blocked_order_queue'] += 1
+                self.metrics['balking_events'][-1] = 1
+                return
 
         # --- Stage 1: Order Queue ---
         enter_order_queue_time = self.env.now
@@ -92,15 +100,17 @@ class DriveThrough:
 
             self.env.process(self.prep_order(car_id, order))
 
-        except simpy.Interrupt:  # Keep the blocking logic
+        except simpy.Interrupt:
             print(f"Car {car_id} blocked at order queue at {self.env.now}")
             self.metrics['cars_blocked_order_queue'] += 1
             return
 
         # --- Stage 4: Service Queue ---
+        # *CRITICAL FIX*:  Record the time *before* attempting to enter the queue.
         enter_service_queue_time = self.env.now
         try:
             yield self.service_queue.put(car_id)
+            # *NOW* calculate the wait time.
             self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
             print(f"Car {car_id} entered service queue at {self.env.now}")
 
@@ -121,7 +131,7 @@ class DriveThrough:
                 self.metrics['wait_times_payment'][-1] = self.env.now - service_start_time
                 print(f"Car {car_id} finished payment at {self.env.now}")
 
-        except simpy.Interrupt:  # Keep the blocking logic
+        except simpy.Interrupt:
             print(f"Car {car_id} blocked at service queue at {self.env.now}")
             self.metrics['cars_blocked_service_queue'] += 1
             return
@@ -212,7 +222,7 @@ def analyze_results(metrics, config):
 
     return results, fig_wait_order,fig_wait_payment, fig_total, df
 
-# --- Streamlit App ---
+# --- Streamlit App --- (Complete and Corrected)
 st.set_page_config(page_title="Drive-Through Simulation", page_icon=":car:", layout="wide")
 st.title("Drive-Through Simulation")
 st.write("""
@@ -233,7 +243,7 @@ with st.sidebar:
         st.session_state.prep_time = 400.0 / 60.0
     if 'payment_time' not in st.session_state:
         st.session_state.payment_time = 1.0
-    if 'order_queue_capacity' not in st.session_state:
+    if 'order_queue_capacity' not in st.session_state:  # New capacity
         st.session_state.order_queue_capacity = 5
     if 'service_queue_capacity' not in st.session_state:
         st.session_state.service_queue_capacity = 8
@@ -257,21 +267,27 @@ with st.sidebar:
         metrics = run_simulation(config)
         results, fig_wait_order, fig_wait_payment, fig_total, df = analyze_results(metrics, config)
 
-# --- Main Area (Results) ---
-st.header("Simulation Results")
+# --- Main Area (Results) ---   <-- Moved OUTSIDE the sidebar
+st.header("Simulation Results")  # Moved outside the 'with st.sidebar' block
 
-if 'metrics' in locals():
-    st.dataframe(df)
+if 'metrics' in locals(): #check if the button has been pressed
+    st.dataframe(df)  # Show raw data
 
     # Display metrics in columns for better layout
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Cars Served", results['Cars Served'])
-        st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
-        st.metric("Cars Blocked (Service Queue)", results['Cars Blocked (Service Queue)'])
-    with col2:
-        st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
-        st.metric("Avg Wait Ordering (min)", results['Avg Wait Ordering (min)'])
-        st.metric("Avg Wait Payment (min)", results['Avg Wait Payment (min)'])
-    with col3:
-        st.metric("Avg Wait Before Order Queue (min)", results
+    col1,col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Cars Served", results['Cars Served'])
+        st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
+        st.metric("Cars Blocked (Service Queue)", results['Cars Blocked (Service Queue)'])
+    with col2:
+        st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
+        st.metric("Avg Wait Ordering (min)", results['Avg Wait Ordering (min)'])
+        st.metric("Avg Wait Payment (min)", results['Avg Wait Payment (min)'])
+    with col3:
+        st.metric("Avg Wait Before Order Queue (min)", results['Avg Wait Before Order Queue (min)'])
+        st.metric("Avg Wait Before Service (min)", results['Avg Wait Before Service (min)'])
+        st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
+
+    st.plotly_chart(fig_wait_order, use_container_width=True)
+    st.plotly_chart(fig_wait_payment, use_container_width=True)
+    st.plotly_chart(fig_total, use_container_width=True)
