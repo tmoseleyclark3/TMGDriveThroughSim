@@ -5,23 +5,22 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-# --- Simulation Code --- (Corrected and Improved)
+# --- Simulation Code --- (Corrected and Improved for Single Lane)
 class Config:
-    def __init__(self, arrival_rate, order_time, prep_time, payment_time, order_queue_capacity, service_queue_capacity, simulation_time, num_order_stations):
+    def __init__(self, arrival_rate, order_time, prep_time, payment_time, order_queue_capacity, service_queue_capacity, simulation_time): # Removed num_order_stations
         self.ARRIVAL_RATE = arrival_rate
         self.ORDER_TIME = order_time
         self.PREP_TIME = prep_time
         self.PAYMENT_TIME = payment_time
-        self.ORDER_QUEUE_CAPACITY = order_queue_capacity  # Capacity for the queue *before* ordering
-        self.SERVICE_QUEUE_CAPACITY = service_queue_capacity # Capacity for queue between order and payment
+        self.ORDER_QUEUE_CAPACITY = order_queue_capacity
+        self.SERVICE_QUEUE_CAPACITY = service_queue_capacity
         self.SIMULATION_TIME = simulation_time
-        self.NUM_ORDER_STATIONS = num_order_stations
 
 class DriveThrough:
     def __init__(self, env, config):
         self.env = env
         self.config = config
-        self.order_stations = [simpy.Resource(env, capacity=1) for _ in range(config.NUM_ORDER_STATIONS)]
+        self.order_station = simpy.Resource(env, capacity=1) # Single order station, not a list
         self.payment_window = simpy.Resource(env, capacity=1)
         self.order_queue = simpy.Store(env, capacity=config.ORDER_QUEUE_CAPACITY)
         self.service_queue = simpy.Store(env, capacity=config.SERVICE_QUEUE_CAPACITY)
@@ -60,7 +59,7 @@ class DriveThrough:
 
         # Initialize metrics with NaN
         for metric in ['wait_times_ordering', 'wait_times_payment', 'wait_times_before_order_queue',
-                       'wait_times_before_service', 'total_times', 'order_sizes']:
+                                    'wait_times_before_service', 'total_times', 'order_sizes']:
             self.metrics[metric].append(np.nan)
         self.metrics['balking_events'].append(0)
 
@@ -81,8 +80,8 @@ class DriveThrough:
             print(f"Car {car_id} entered order queue at {self.env.now}")
 
             # --- Stage 2: Ordering ---
-            order_station = random.choice(self.order_stations)
-            with order_station.request() as request:
+            # No more random.choice needed, using the single order_station directly
+            with self.order_station.request() as request: # Use self.order_station directly
                 yield request
                 yield self.order_queue.get()
                 print(f"Car {car_id} left order queue at {self.env.now}")
@@ -106,11 +105,9 @@ class DriveThrough:
             return
 
         # --- Stage 4: Service Queue ---
-        # *CRITICAL FIX*:  Record the time *before* attempting to enter the queue.
         enter_service_queue_time = self.env.now
         try:
             yield self.service_queue.put(car_id)
-            # *NOW* calculate the wait time.
             self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
             print(f"Car {car_id} entered service queue at {self.env.now}")
 
@@ -145,7 +142,7 @@ class DriveThrough:
         self.metrics['total_times'][-1] = self.env.now - arrival_time
         self.metrics['cars_served'] += 1
         print(f"Car {car_id} completed at {self.env.now}")
-    
+
     def prep_order(self, car_id, order):
         with self.order_prep.request() as req:
             yield req
@@ -186,7 +183,7 @@ def analyze_results(metrics, config):
             'Avg Wait Before Order Queue (min)': 0.0,
             'Avg Wait Before Service (min)': 0.0,
             'Avg Total Time (min)': 0.0,
-        }, px.histogram(), px.histogram(),pd.DataFrame()
+        }, px.histogram(), px.histogram(),pd.DataFrame(), px.histogram()
 
     df = pd.DataFrame({
         'Car ID': metrics['car_ids'],
@@ -226,7 +223,7 @@ def analyze_results(metrics, config):
 st.set_page_config(page_title="Drive-Through Simulation", page_icon=":car:", layout="wide")
 st.title("Drive-Through Simulation")
 st.write("""
-This app simulates a drive-through service using SimPy.
+This app simulates a single-lane drive-through service using SimPy.
 Adjust the parameters in the sidebar and click 'Run Simulation' to see the results.
 """)
 
@@ -243,14 +240,12 @@ with st.sidebar:
         st.session_state.prep_time = 400.0 / 60.0
     if 'payment_time' not in st.session_state:
         st.session_state.payment_time = 1.0
-    if 'order_queue_capacity' not in st.session_state:  # New capacity
+    if 'order_queue_capacity' not in st.session_state:
         st.session_state.order_queue_capacity = 5
     if 'service_queue_capacity' not in st.session_state:
         st.session_state.service_queue_capacity = 8
     if 'simulation_time' not in st.session_state:
         st.session_state.simulation_time = 600
-    if 'num_order_stations' not in st.session_state:
-        st.session_state.num_order_stations = 2
 
     # Use st.session_state to store and retrieve widget values
     arrival_rate = st.number_input("Arrival Rate (cars/min)", min_value=0.1, max_value=10.0, value=st.session_state.arrival_rate, step=0.1, format="%.1f", key="arrival_rate")
@@ -260,35 +255,34 @@ with st.sidebar:
     order_queue_capacity = st.number_input("Order Queue Capacity", min_value=1, max_value=100, value=st.session_state.order_queue_capacity, step=1, key="order_queue_capacity")
     service_queue_capacity = st.number_input("Service Queue Capacity", min_value=1, max_value=100, value=st.session_state.service_queue_capacity, step=1, key="service_queue_capacity")
     simulation_time = st.number_input("Simulation Time (min)", min_value=1, max_value=1440, value=st.session_state.simulation_time, step=1, key="simulation_time")
-    num_order_stations = st.number_input("Number of Order Stations", min_value=1, max_value=10, value=st.session_state.num_order_stations, step=1, key="num_order_stations")
+    # num_order_stations input removed
 
     if st.button("Run Simulation"):
-        config = Config(arrival_rate, order_time, prep_time, payment_time, order_queue_capacity, service_queue_capacity, simulation_time, num_order_stations)
+        config = Config(arrival_rate, order_time, prep_time, payment_time, order_queue_capacity, service_queue_capacity, simulation_time) # Removed num_order_stations
         metrics = run_simulation(config)
         results, fig_wait_order, fig_wait_payment, fig_total, df = analyze_results(metrics, config)
 
-# --- Main Area (Results) ---   <-- Moved OUTSIDE the sidebar
-st.header("Simulation Results")  # Moved outside the 'with st.sidebar' block
+# --- Main Area (Results) ---  <-- Moved OUTSIDE the sidebar
+st.header("Simulation Results") # Moved outside the 'with st.sidebar' block
 
 if 'metrics' in locals(): #check if the button has been pressed
     st.dataframe(df)  # Show raw data
 
     # Display metrics in columns for better layout
     col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Cars Served", results['Cars Served'])
-        st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
-        st.metric("Cars Blocked (Service Queue)", results['Cars Blocked (Service Queue)'])
-    with col2:
-        st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
-        st.metric("Avg Wait Ordering (min)", results['Avg Wait Ordering (min)'])
-        st.metric("Avg Wait Payment (min)", results['Avg Wait Payment (min)'])
-    with col3:
-        st.metric("Avg Wait Before Order Queue (min)", results['Avg Wait Before Order Queue (min)'])
-        st.metric("Avg Wait Before Service (min)", results['Avg Wait Before Service (min)'])
-        st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
+    with col1:
+        st.metric("Cars Served", results['Cars Served'])
+        st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
+        st.metric("Cars Blocked (Service Queue)", results['Cars Blocked (Service Queue)'])
+    with col2:
+        st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
+        st.metric("Avg Wait Ordering (min)", results['Avg Wait Ordering (min)'])
+        st.metric("Avg Wait Payment (min)", results['Avg Wait Payment (min)'])
+    with col3:
+        st.metric("Avg Wait Before Order Queue (min)", results['Avg Wait Before Order Queue (min)'])
+        st.metric("Avg Wait Before Service (min)", results['Avg Wait Before Service (min)'])
+        st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
 
-    st.plotly_chart(fig_wait_order, use_container_width=True)
-    st.plotly_chart(fig_wait_payment, use_container_width=True)
-    st.plotly_chart(fig_total, use_container_width=True)
-
+    st.plotly_chart(fig_wait_order, use_container_width=True)
+    st.plotly_chart(fig_wait_payment, use_container_width=True)
+    st.plotly_chart(fig_total, use_container_width=True)
