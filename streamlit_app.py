@@ -34,9 +34,15 @@ class DriveThrough:
             'car_ids': []  # Store car IDs
         }
 
-    def process_car(self, car_id):
+def process_car(self, car_id):
         arrival_time = self.env.now
         self.metrics['car_ids'].append(car_id)  # Track car ID
+
+        # Add placeholders for ALL metrics at the BEGINNING:
+        self.metrics['wait_times_ordering'].append(np.nan)
+        self.metrics['wait_times_before_service'].append(np.nan)
+        self.metrics['wait_times_service'].append(np.nan)
+        self.metrics['total_times'].append(np.nan)
 
         # Stage 1: Ordering
         with self.order_station.request() as request:
@@ -44,7 +50,8 @@ class DriveThrough:
             order_start_time = self.env.now
             yield self.env.timeout(self.config.ORDER_TIME)
             order_end_time = self.env.now
-            self.metrics['wait_times_ordering'].append(order_end_time - order_start_time)
+            # Overwrite the placeholder with the actual value:
+            self.metrics['wait_times_ordering'][-1] = order_end_time - order_start_time
 
         # Stage 2: Start order prep (non-blocking)
         self.env.process(self.prep_order(car_id))
@@ -53,14 +60,16 @@ class DriveThrough:
         enter_service_queue_time = self.env.now
         try:
             yield self.service_queue.put(car_id)
-            self.metrics['wait_times_before_service'].append(self.env.now - enter_service_queue_time)
+            # Overwrite the placeholder:
+            self.metrics['wait_times_before_service'][-1] = self.env.now - enter_service_queue_time
 
             # Stage 4: Payment and Handoff
             with self.service_window.request() as request:
                 yield request
                 yield self.env.timeout(self.config.PAYMENT_TIME)
                 service_end_time = self.env.now
-                self.metrics['wait_times_service'].append(service_end_time - enter_service_queue_time)
+                #Overwrite placeholder
+                self.metrics['wait_times_service'][-1] = service_end_time - enter_service_queue_time
                 yield self.service_queue.get()
 
             # Stage 5: Wait for order prep
@@ -69,8 +78,14 @@ class DriveThrough:
 
             # Completion
             total_time = self.env.now - arrival_time
-            self.metrics['total_times'].append(total_time)
+            # Overwrite the placeholder:
+            self.metrics['total_times'][-1] = total_time
             self.metrics['cars_served'] += 1
+
+        except simpy.Interrupt:
+            self.metrics['cars_blocked'] += 1
+            # No need to add np.nan again; it's already there as a placeholder
+            return
 
         except simpy.Interrupt:
             self.metrics['cars_blocked'] += 1
