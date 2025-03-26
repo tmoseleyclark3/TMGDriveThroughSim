@@ -208,10 +208,9 @@ class DriveThrough:
 
 def run_simulation(config):
     """Runs the drive-through simulation."""
-    print("\n--- Starting DETERMINISTIC Simulation ---") # Added Deterministic keyword
+    print("\n--- Starting DETERMINISTIC Simulation ---")
     print("Configuration:")
     for param, value in config.__dict__.items():
-        # Format INTERARRIVAL_TIME for better readability if it's not infinite
         if param == 'INTERARRIVAL_TIME' and value != float('inf'):
              print(f"  {param}: {value:.4f}")
         else:
@@ -224,7 +223,13 @@ def run_simulation(config):
     env.run(until=config.SIMULATION_TIME)
 
     print(f"--- Simulation Complete at time {env.now:.2f} ---")
-    return drive_through.metrics
+
+    # Get the metrics dictionary
+    metrics = drive_through.metrics
+    # *** ADD THIS LINE ***
+    metrics['car_counter'] = drive_through.car_counter # Add the counter to the dict
+
+    return metrics # Return the updated dictionary
 
 # --- Analysis Function (Updated for Renamed Metric) ---
 def analyze_results(metrics, config):
